@@ -2,6 +2,7 @@ import { parentPort, workerData } from 'worker_threads';
 import { IPCMessage, AgentStatus, KimiMessage } from '../common/types.js';
 import { MCPManager } from './MCPClient.js';
 import { KimiClient } from './KimiClient.js';
+import { NATIVE_TOOLS } from './NativeTools.js';
 
 if (!parentPort) {
   throw new Error('Worker must be spawned from a parent thread.');
@@ -68,7 +69,16 @@ async function runAgentLoop(prompt: string) {
   messages.push({ role: 'user', content: prompt });
 
   try {
-    const tools = await mcp.getAllTools();
+    const mcpTools = await mcp.getAllTools();
+    const tools = [
+      ...NATIVE_TOOLS.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+        serverName: 'native'
+      })),
+      ...mcpTools
+    ];
     let keepRunning = true;
 
     while (keepRunning) {
@@ -95,7 +105,7 @@ async function runAgentLoop(prompt: string) {
         const tName = detectedToolCall.function.name;
         const tArgs = detectedToolCall.function.arguments;
         
-        // Encontra o servidor MCP correspondente à ferramenta
+        // Encontra o servidor correspondente à ferramenta
         const mcpTool = tools.find(t => t.name === tName);
         const serverName = mcpTool ? mcpTool.serverName : 'unknown';
 
@@ -108,7 +118,14 @@ async function runAgentLoop(prompt: string) {
           sendStatus('EXECUTING_TOOL');
           sendOutput(`\n[EXECUTING TOOL]: ${tName}...\n`);
           try {
-            const toolResult = await mcp.callTool(serverName, tName, tArgs);
+            let toolResult;
+            if (serverName === 'native') {
+              const nativeTool = NATIVE_TOOLS.find(t => t.name === tName);
+              if (!nativeTool) throw new Error(`Native tool ${tName} not found.`);
+              toolResult = await nativeTool.execute(tArgs);
+            } else {
+              toolResult = await mcp.callTool(serverName, tName, tArgs);
+            }
             sendOutput(`\n[TOOL RESULT SUCCESS]\n`);
             
             // Adiciona a resposta da ferramenta no histórico de mensagens do LLM

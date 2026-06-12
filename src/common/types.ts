@@ -53,6 +53,8 @@ export interface KimiMessage {
   name?: string;
 }
 
+export type TUIOverlayMode = 'NONE' | 'HELP' | 'MODELS_SELECT' | 'SESSIONS_SELECT' | 'MCP_STATUS';
+
 export interface IDatabaseStore {
   initialize(): Promise<void>;
   createSession(session: Omit<AgentSession, 'logs'>): Promise<void>;
@@ -60,6 +62,7 @@ export interface IDatabaseStore {
   appendLog(agentId: string, text: string): Promise<void>;
   getSessionLogs(agentId: string): Promise<string[]>;
   getAllSessions(): Promise<AgentSession[]>;
+  deleteSession(agentId: string): Promise<void>;
   close(): Promise<void>;
 }
 

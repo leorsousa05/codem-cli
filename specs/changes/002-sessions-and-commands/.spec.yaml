@@ -1,0 +1,7 @@
+id: "002-sessions-and-commands"
+title: "Interactive Sessions Management and Slash Commands Menu"
+status: "proposed"
+author: "Architect"
+date: "2026-06-12"
+subagents:
+  approved: false

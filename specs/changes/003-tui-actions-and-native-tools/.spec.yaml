@@ -1,0 +1,7 @@
+id: "003-tui-actions-and-native-tools"
+title: "Interactive TUI Actions (F1-F5), Autocomplete Dropdown and Native Tools Sandbox"
+status: "proposed"
+author: "Architect"
+date: "2026-06-12"
+subagents:
+  approved: false
