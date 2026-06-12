@@ -7,7 +7,8 @@ export type MessageType =
   | 'AGENT_TOOL_REQUEST'
   | 'AGENT_TOOL_RESPONSE'
   | 'AGENT_STOP'
-  | 'AGENT_DESTROY_SUBTASK';
+  | 'AGENT_DESTROY_SUBTASK'
+  | 'AGENT_SKILL_INJECT';
 
 export type AgentStatus =
   | 'IDLE'
@@ -71,6 +72,7 @@ export interface IAgentRunner {
   stop(agentId: string): Promise<void>;
   sendCommand(agentId: string, command: string): void;
   sendApproval(agentId: string, payload: ToolResponsePayload): void;
+  sendSkill(agentId: string, skillName: string, content: string): void;
   onMessage(callback: (message: IPCMessage) => void): void;
 }
 

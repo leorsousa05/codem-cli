@@ -1,28 +1,87 @@
 import { parentPort, workerData } from 'worker_threads';
-import { IPCMessage, AgentStatus, KimiMessage } from '../common/types.js';
+import { IPCMessage, AgentStatus } from '../common/types.js';
 import { MCPManager } from './MCPClient.js';
-import { KimiClient } from './KimiClient.js';
-import { NATIVE_TOOLS } from './NativeTools.js';
+import { AgentHarness } from './harness/AgentHarness.js';
+import { ProviderRegistry } from './providers/ProviderRegistry.js';
+import { ConfigManager } from '../common/config.js';
+import * as os from 'os';
+import * as path from 'path';
 
 if (!parentPort) {
   throw new Error('Worker must be spawned from a parent thread.');
 }
 
 const agentId = workerData.agentId;
-const apiKey = workerData.apiKey;
-const model = workerData.model;
 
 const mcp = new MCPManager();
-let kimi: KimiClient | null = null;
-let messages: KimiMessage[] = [];
+const configManager = new ConfigManager();
+let harness: AgentHarness | null = null;
+
+function buildSystemPrompt(providerType: string, modelName: string, nativeToolNames: string[]): string {
+  const cwd = process.cwd();
+  const projectName = path.basename(cwd);
+  const platform = `${os.type()} ${os.release()} (${os.arch()})`;
+  const now = new Date().toISOString();
+
+  return [
+    `You are Codem, an expert AI coding assistant running inside the Codem CLI terminal application.`,
+    ``,
+    `## Runtime Context`,
+    `- **Session ID**: ${agentId}`,
+    `- **Date/Time**: ${now}`,
+    `- **Operating System**: ${platform}`,
+    `- **Working Directory**: ${cwd}`,
+    `- **Project**: ${projectName}`,
+    `- **Active Provider**: ${providerType}`,
+    `- **Active Model**: ${modelName}`,
+    ``,
+    `## Your Identity`,
+    `You are a senior full-stack engineer and architect with deep knowledge of TypeScript, Node.js, React, and system design.`,
+    `You are pair-programming with the user directly in their terminal. Be concise, precise, and technical.`,
+    `Always refer to the working directory above as your project root when reading or writing files.`,
+    ``,
+    `## Available Tools`,
+    `You have access to the following native tools to interact with the filesystem and shell:`,
+    ...nativeToolNames.map(n => `- ${n}`),
+    ``,
+    `Additional MCP (Model Context Protocol) tools may also be available depending on the project's mcp.json configuration.`,
+    ``,
+    `## Behavioral Rules`,
+    `- Always confirm your understanding of the task before making large changes.`,
+    `- Prefer surgical, minimal edits over rewrites.`,
+    `- When in doubt about a file path, use the read_file or execute_bash tool to verify first.`,
+    `- Never expose raw API keys or secrets in your responses.`,
+    `- If you cannot complete a task safely, explain why clearly.`,
+  ].join('\n');
+}
 
 // Gerenciador de suspensão para aprovação do Sandbox
 let pendingApprovalResolver: ((value: any) => void) | null = null;
 
 async function init() {
   await mcp.initialize();
-  if (apiKey) {
-    kimi = new KimiClient(apiKey, model);
+  
+  // Carrega configuração ativa
+  const config = await configManager.load();
+  const activeProviderType = config.activeProvider || 'kimi';
+  const providerConf = config.providers[activeProviderType];
+  
+  if (providerConf && providerConf.apiKey) {
+    const { NATIVE_TOOLS } = await import('./NativeTools.js');
+    const nativeToolNames = NATIVE_TOOLS.map((t: any) => t.name);
+    const modelName = providerConf.defaultModel || '';
+    const systemPrompt = buildSystemPrompt(activeProviderType, modelName, nativeToolNames);
+
+    const providerInstance = ProviderRegistry.getProvider(activeProviderType, providerConf);
+    harness = new AgentHarness(
+      agentId,
+      providerInstance,
+      modelName,
+      mcp,
+      parentPort!,
+      requestToolApproval,
+      systemPrompt
+    );
   }
 
   sendStatus('IDLE');
@@ -58,156 +117,61 @@ async function requestToolApproval(toolName: string, args: any, serverName: stri
   });
 }
 
-async function runAgentLoop(prompt: string) {
-  if (!kimi) {
-    sendOutput('Error: Kimi API Key not configured. Use /provider to set it.');
-    sendStatus('ERROR');
-    return;
-  }
-
-  sendStatus('THINKING');
-  messages.push({ role: 'user', content: prompt });
-
-  try {
-    const mcpTools = await mcp.getAllTools();
-    const tools = [
-      ...NATIVE_TOOLS.map(t => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-        serverName: 'native'
-      })),
-      ...mcpTools
-    ];
-    let keepRunning = true;
-
-    while (keepRunning) {
-      let currentResponseText = '';
-      let detectedToolCall: any = null;
-
-      await kimi.chatStream(
-        messages,
-        tools,
-        (chunk) => {
-          currentResponseText += chunk;
-          sendOutput(chunk);
-        },
-        (toolCall) => {
-          detectedToolCall = toolCall;
-        }
-      );
-
-      if (currentResponseText) {
-        messages.push({ role: 'assistant', content: currentResponseText });
-      }
-
-      if (detectedToolCall) {
-        const tName = detectedToolCall.function.name;
-        const tArgs = detectedToolCall.function.arguments;
-        
-        // Encontra o servidor correspondente à ferramenta
-        const mcpTool = tools.find(t => t.name === tName);
-        const serverName = mcpTool ? mcpTool.serverName : 'unknown';
-
-        sendOutput(`\n[REQUESTING TOOL EXECUTION]: ${tName} from ${serverName}...\n`);
-        
-        // Pausa e aguarda aprovação na TUI
-        const approvalResult = await requestToolApproval(tName, tArgs, serverName);
-
-        if (approvalResult.approved) {
-          sendStatus('EXECUTING_TOOL');
-          sendOutput(`\n[EXECUTING TOOL]: ${tName}...\n`);
-          try {
-            let toolResult;
-            if (serverName === 'native') {
-              const nativeTool = NATIVE_TOOLS.find(t => t.name === tName);
-              if (!nativeTool) throw new Error(`Native tool ${tName} not found.`);
-              toolResult = await nativeTool.execute(tArgs);
-            } else {
-              toolResult = await mcp.callTool(serverName, tName, tArgs);
-            }
-            sendOutput(`\n[TOOL RESULT SUCCESS]\n`);
-            
-            // Adiciona a resposta da ferramenta no histórico de mensagens do LLM
-            messages.push({
-              role: 'assistant',
-              content: null,
-              tool_calls: [detectedToolCall]
-            });
-            messages.push({
-              role: 'tool',
-              tool_call_id: detectedToolCall.id,
-              name: tName,
-              content: JSON.stringify(toolResult)
-            });
-            
-            sendStatus('THINKING');
-          } catch (toolError: any) {
-            const errMsg = toolError.message || String(toolError);
-            sendOutput(`\n[TOOL ERROR]: ${errMsg}\n`);
-            
-            messages.push({
-              role: 'assistant',
-              content: null,
-              tool_calls: [detectedToolCall]
-            });
-            messages.push({
-              role: 'tool',
-              tool_call_id: detectedToolCall.id,
-              name: tName,
-              content: JSON.stringify({ error: errMsg })
-            });
-            
-            sendStatus('THINKING');
-          }
-        } else {
-          sendOutput(`\n[TOOL EXECUTION REJECTED BY USER]\n`);
-          
-          messages.push({
-            role: 'assistant',
-            content: null,
-            tool_calls: [detectedToolCall]
-          });
-          messages.push({
-            role: 'tool',
-            tool_call_id: detectedToolCall.id,
-            name: tName,
-            content: JSON.stringify({ error: 'Rejected by user approval sandbox.' })
-          });
-          
-          sendStatus('THINKING');
-        }
-      } else {
-        keepRunning = false;
-      }
-    }
-
-    sendStatus('FINISHED');
-  } catch (error: any) {
-    sendOutput(`\n[CRITICAL ERROR]: ${error.message || String(error)}\n`);
-    sendStatus('ERROR');
-  }
-}
-
 parentPort.on('message', async (message: IPCMessage) => {
   if (message.type === 'AGENT_INPUT') {
     const prompt = message.payload.command;
-    // Permite configurar a API Key dinamicamente via comando especial
-    if (prompt.startsWith('/provider ')) {
-      const parts = prompt.split(' ');
-      const key = parts[1];
-      const selectedModel = parts[2] || 'moonshot-v1-8k';
-      kimi = new KimiClient(key, selectedModel);
-      sendOutput('Provider configured successfully.\n');
+    
+    // Atualiza dinamicamente se a TUI salvar novas configurações
+    if (prompt === '/reload-config') {
+      const config = await configManager.load();
+      const activeProviderType = config.activeProvider;
+      const providerConf = config.providers[activeProviderType];
+      
+      if (providerConf && providerConf.apiKey) {
+        const { NATIVE_TOOLS } = await import('./NativeTools.js');
+        const nativeToolNames = NATIVE_TOOLS.map((t: any) => t.name);
+        const modelName = providerConf.defaultModel || '';
+        const systemPrompt = buildSystemPrompt(activeProviderType, modelName, nativeToolNames);
+
+        const providerInstance = ProviderRegistry.getProvider(activeProviderType, providerConf);
+        harness = new AgentHarness(
+          agentId,
+          providerInstance,
+          modelName,
+          mcp,
+          parentPort!,
+          requestToolApproval,
+          systemPrompt
+        );
+        sendOutput(`Config reloaded. Active Provider: ${activeProviderType}, Model: ${modelName}\n`);
+      } else {
+        sendOutput('Error: Active provider configuration not found or API key is missing.\n');
+      }
       sendStatus('IDLE');
       return;
     }
-    await runAgentLoop(prompt);
+
+    if (!harness) {
+      sendOutput('Error: AI Provider not configured. Press F2 or use /provider to setup API Keys.\n');
+      sendStatus('ERROR');
+      return;
+    }
+
+    await harness.runLoop(prompt);
   } else if (message.type === 'AGENT_TOOL_RESPONSE') {
     if (pendingApprovalResolver) {
       pendingApprovalResolver(message.payload);
       pendingApprovalResolver = null;
     }
+  } else if (message.type === 'AGENT_SKILL_INJECT') {
+    if (!harness) {
+      sendOutput('Error: AI Provider not configured. Use /provider to setup API Keys.\n');
+      return;
+    }
+    const { skillName, content } = message.payload;
+    harness.injectSkill(skillName, content);
+    sendOutput(`\n⚡ Skill '${skillName}' injected. Ready.\n`);
+    sendStatus('IDLE');
   } else if (message.type === 'AGENT_STOP') {
     await mcp.close();
     sendStatus('STOPPED');

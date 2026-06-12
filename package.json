@@ -10,7 +10,11 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.83",
+    "@ai-sdk/google": "^3.0.81",
+    "@ai-sdk/openai": "^3.0.70",
     "@modelcontextprotocol/sdk": "^0.6.0",
+    "ai": "^6.0.202",
     "axios": "^1.7.9",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
