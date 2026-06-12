@@ -1,0 +1,7 @@
+id: "001-codem-cli"
+title: "IA Code Assistance CLI with Moonshot/Kimi, MCP and Concurrent Worker Threads"
+status: "completed"
+author: "Architect"
+date: "2026-06-12"
+subagents:
+  approved: false

@@ -1,112 +1,144 @@
 import { Worker } from 'worker_threads';
-import * as path from 'path';
-import { IPCMessage } from '../common/types.js';
+import { AgentSession, IPCMessage, IAgentRunner, ToolResponsePayload } from '../common/types.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-export class AgentRunner {
-  private workers = new Map<string, Worker>();
-  private messageListeners = new Set<(message: IPCMessage) => void>();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-  public spawn(agentId: string, initialPrompt: string, sandboxMode: 'MANUAL' | 'AUTO' = 'MANUAL'): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // Resolve compiled JS output inside dist directory
-      const activeDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(new URL(import.meta.url).pathname);
-      let workerPath = path.resolve(activeDir, 'agentWorker.js');
-      // If running inside Jest test directory, point to dist target build
-      if (workerPath.includes('src/runner')) {
-        workerPath = workerPath.replace('src/runner', 'dist/runner');
+export class AgentRunner implements IAgentRunner {
+  private activeWorkers: Map<string, Worker> = new Map();
+  private messageListeners: Set<(message: IPCMessage) => void> = new Set();
+  private apiKey = '';
+  private model = 'moonshot-v1-8k';
+
+  constructor(apiKey?: string, model?: string) {
+    if (apiKey) this.apiKey = apiKey;
+    if (model) this.model = model;
+  }
+
+  public setProvider(apiKey: string, model: string) {
+    this.apiKey = apiKey;
+    this.model = model;
+  }
+
+  public spawn(session: AgentSession): void {
+    // O worker_threads do Node aponta para o arquivo JS compilado
+    const workerPath = path.resolve(__dirname, '../worker/agent.worker.js');
+    
+    const worker = new Worker(workerPath, {
+      workerData: {
+        agentId: session.id,
+        apiKey: this.apiKey,
+        model: this.model
       }
+    });
+
+    worker.on('message', (message: IPCMessage) => {
+      // Repassa eventos locais
+      this.notifyListeners(message);
       
-      const worker = new Worker(workerPath, {
-        workerData: { agentId, initialPrompt, sandboxMode }
-      });
+      // Lida com interceptação de spawn de subtask a partir do worker
+      if (message.type === 'AGENT_SPAWN_SUBTASK') {
+        const subtaskSession = message.payload as AgentSession;
+        this.spawn(subtaskSession);
+      }
+    });
 
-      worker.on('message', (message: IPCMessage) => {
-        this.notifyListeners(message);
+    worker.on('error', (err) => {
+      this.notifyListeners({
+        type: 'AGENT_STATUS',
+        agentId: session.id,
+        payload: { status: 'ERROR', error: err.message }
       });
+      this.notifyListeners({
+        type: 'AGENT_OUTPUT',
+        agentId: session.id,
+        payload: { text: `\n[WORKER RUNTIME ERROR]: ${err.message}\n` }
+      });
+    });
 
-      worker.on('error', (err: any) => {
+    worker.on('exit', (code) => {
+      if (code !== 0) {
         this.notifyListeners({
-          id: Math.random().toString(36).substring(7),
-          agentId,
           type: 'AGENT_STATUS',
-          payload: { status: 'ERROR', error: err.message || String(err) },
-          timestamp: Date.now()
+          agentId: session.id,
+          payload: { status: 'ERROR' }
         });
-      });
+      }
+      this.activeWorkers.delete(session.id);
+    });
 
-      worker.on('exit', (code) => {
-        if (code !== 0) {
-          this.notifyListeners({
-            id: Math.random().toString(36).substring(7),
-            agentId,
-            type: 'AGENT_STATUS',
-            payload: { status: 'ERROR', error: `Worker exited with status ${code}` },
-            timestamp: Date.now()
-          });
-        }
-      });
-
-      this.workers.set(agentId, worker);
-      resolve();
+    this.activeWorkers.set(session.id, worker);
+    
+    // Dispara sinalizador inicial na TUI
+    this.notifyListeners({
+      type: 'AGENT_SPAWN',
+      agentId: session.id,
+      payload: { session }
     });
   }
 
-  public stop(agentId: string): Promise<void> {
-    const worker = this.workers.get(agentId);
+  public async stop(agentId: string): Promise<void> {
+    const worker = this.activeWorkers.get(agentId);
     if (worker) {
-      worker.postMessage({
-        id: Math.random().toString(36).substring(7),
-        agentId,
-        type: 'AGENT_STOP',
-        payload: {},
-        timestamp: Date.now()
-      } as IPCMessage);
+      worker.postMessage({ type: 'AGENT_STOP', agentId } as IPCMessage);
       
-      // Force terminate if worker does not exit within 1 second
-      setTimeout(() => {
-        worker.terminate();
-      }, 1000);
+      // Dá um tempo razoável para fechar graciosamente, senão termina forçado
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          worker.terminate();
+          resolve();
+        }, 1000);
 
-      this.workers.delete(agentId);
+        worker.on('exit', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+
+      this.activeWorkers.delete(agentId);
     }
-    return Promise.resolve();
   }
 
-  public sendCommand(agentId: string, command: string): Promise<void> {
-    const worker = this.workers.get(agentId);
+  public sendCommand(agentId: string, command: string): void {
+    const worker = this.activeWorkers.get(agentId);
     if (worker) {
       worker.postMessage({
-        id: Math.random().toString(36).substring(7),
-        agentId,
         type: 'AGENT_INPUT',
-        payload: { command },
-        timestamp: Date.now()
+        agentId,
+        payload: { command }
       } as IPCMessage);
     }
-    return Promise.resolve();
   }
 
-  public sendApproval(agentId: string, requestId: string, approved: boolean): Promise<void> {
-    const worker = this.workers.get(agentId);
+  public sendApproval(agentId: string, payload: ToolResponsePayload): void {
+    const worker = this.activeWorkers.get(agentId);
     if (worker) {
       worker.postMessage({
-        id: Math.random().toString(36).substring(7),
-        agentId,
         type: 'AGENT_TOOL_RESPONSE',
-        payload: { requestId, approved, response: approved ? 'Success' : 'User denied operation' },
-        timestamp: Date.now()
+        agentId,
+        payload
       } as IPCMessage);
     }
-    return Promise.resolve();
   }
 
-  public onMessage(listener: (message: IPCMessage) => void) {
-    this.messageListeners.add(listener);
+  public onMessage(callback: (message: IPCMessage) => void): void {
+    this.messageListeners.add(callback);
   }
 
   private notifyListeners(message: IPCMessage) {
     for (const listener of this.messageListeners) {
-      listener(message);
+      try {
+        listener(message);
+      } catch {}
+    }
+  }
+
+  public async shutdownAll(): Promise<void> {
+    const ids = Array.from(this.activeWorkers.keys());
+    for (const id of ids) {
+      await this.stop(id);
     }
   }
 }
