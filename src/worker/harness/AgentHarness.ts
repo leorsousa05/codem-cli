@@ -5,6 +5,62 @@ import { MCPManager } from '../MCPClient.js';
 import { IPCMessage, AgentStatus } from '../../common/types.js';
 import { MessagePort } from 'worker_threads';
 
+type StreamPart =
+  | { type: 'text-delta'; text: string }
+  | { type: 'reasoning-delta'; text: string }
+  | { type: 'error'; error: unknown }
+  | { type: string; [key: string]: unknown };
+
+interface StreamTextLikeResponse {
+  fullStream: AsyncIterable<StreamPart>;
+  text: PromiseLike<string>;
+  reasoningText: PromiseLike<string | undefined>;
+  toolCalls: PromiseLike<any[]>;
+}
+
+interface ModelTurnOutput {
+  assistantText: string;
+  reasoningText: string;
+  streamError: string | null;
+  resolvedText: string;
+  resolvedReasoning: string | undefined;
+  resolvedToolCalls: any[];
+}
+
+export async function collectStreamOutput(
+  response: StreamTextLikeResponse
+): Promise<ModelTurnOutput> {
+  let assistantText = '';
+  let reasoningText = '';
+  let streamError: string | null = null;
+
+  for await (const part of response.fullStream) {
+    if (part.type === 'text-delta') {
+      assistantText += part.text;
+    } else if (part.type === 'reasoning-delta') {
+      reasoningText += part.text;
+    } else if (part.type === 'error') {
+      const err = part.error;
+      streamError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  const [resolvedText, resolvedReasoning, resolvedToolCalls] = await Promise.all([
+    response.text,
+    response.reasoningText,
+    response.toolCalls,
+  ]);
+
+  return {
+    assistantText,
+    reasoningText,
+    streamError,
+    resolvedText,
+    resolvedReasoning,
+    resolvedToolCalls,
+  };
+}
+
 // Mensagens internas simplificadas para evitar incompatibilidades de tipo entre versões da biblioteca
 export interface SimpleHarnessMessage {
   role: 'user' | 'assistant' | 'tool';
@@ -93,26 +149,37 @@ export class AgentHarness {
           tools: formattedTools,
         });
 
-        let assistantText = '';
-        for await (const textPart of response.textStream) {
-          assistantText += textPart;
+        const turnOutput = await collectStreamOutput(response);
+
+        if (turnOutput.streamError) {
+          this.sendOutput(`[CRITICAL ERROR]: ${turnOutput.streamError}`);
+          this.sendStatus('ERROR');
+          return;
         }
 
-        const resolvedText = await response.text;
-        const resolvedToolCalls = await response.toolCalls;
+        const finalReasoning = turnOutput.reasoningText || (turnOutput.resolvedReasoning ?? '');
+        if (finalReasoning.trim()) {
+          this.sendOutput('[REASONING_START]');
+          this.sendOutput(finalReasoning);
+          this.sendOutput('[REASONING_END]');
+        }
 
-        if (assistantText.trim()) {
-          this.sendOutput(assistantText);
+        if (turnOutput.assistantText.trim()) {
+          this.sendOutput(turnOutput.assistantText);
+        }
+
+        if (!turnOutput.assistantText.trim() && !finalReasoning.trim() && (!turnOutput.resolvedToolCalls || turnOutput.resolvedToolCalls.length === 0)) {
+          this.sendOutput('[SYSTEM]: No response from model.');
         }
 
         // Monta a resposta da assistant contendo texto e tool calls se houverem
         const assistantContent: any[] = [];
-        if (resolvedText) {
-          assistantContent.push({ type: 'text', text: resolvedText });
+        if (turnOutput.resolvedText) {
+          assistantContent.push({ type: 'text', text: turnOutput.resolvedText });
         }
 
-        if (resolvedToolCalls && resolvedToolCalls.length > 0) {
-          for (const call of resolvedToolCalls) {
+        if (turnOutput.resolvedToolCalls && turnOutput.resolvedToolCalls.length > 0) {
+          for (const call of turnOutput.resolvedToolCalls) {
             const castedCall = call as any;
             assistantContent.push({
               type: 'tool-call',
@@ -127,8 +194,8 @@ export class AgentHarness {
           this.messages.push({ role: 'assistant', content: assistantContent });
         }
 
-        if (resolvedToolCalls && resolvedToolCalls.length > 0) {
-          const call: any = resolvedToolCalls[0];
+        if (turnOutput.resolvedToolCalls && turnOutput.resolvedToolCalls.length > 0) {
+          const call: any = turnOutput.resolvedToolCalls[0];
           const tName = call.toolName;
           const tArgs = call.args || call.input;
 

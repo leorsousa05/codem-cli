@@ -38,12 +38,14 @@ This redesign replaces the monolithic `TelemetryHUD` component with a modular Re
 │   │   └── utils/
 │   │       ├── logFormatter.ts         # ADDED: log line parsing and color classification
 │   │       ├── toolLogParser.ts        # ADDED: group tool lifecycle markers into blocks
+│   │       ├── reasoningParser.ts      # ADDED: group reasoning markers into blocks
 │   │       └── statusHints.ts          # ADDED: contextual status-bar hint text
 │   └── tests/
 │       └── tui/
 │           ├── theme.test.ts           # ADDED: theme detection and palette tests
 │           ├── logFormatter.test.ts    # ADDED: log formatting tests
 │           ├── toolLogParser.test.ts   # ADDED: tool marker parsing tests
+│           ├── reasoningParser.test.ts # ADDED: reasoning marker parsing tests
 │           └── statusHints.test.ts     # ADDED: status bar hint logic tests
 └── specs/
     └── changes/
@@ -135,9 +137,8 @@ export interface HeaderProps {
 export interface LogViewerProps {
   logs: string[];
   expandedBlocks: Set<string>;
+  expandedReasonings: Set<string>;
   focusedBlockId: string | null;
-  onToggleBlock: (id: string) => void;
-  onFocusBlock: (id: string | null) => void;
 }
 
 // src/tui/components/ToolCallRow.tsx
@@ -146,6 +147,13 @@ export interface ToolCallRowProps {
   expanded: boolean;
   focused: boolean;
   onToggle: () => void;
+}
+
+// src/tui/components/ReasoningRow.tsx
+export interface ReasoningRowProps {
+  block: ReasoningBlock;
+  expanded: boolean;
+  focused: boolean;
 }
 
 // src/tui/components/InputLine.tsx
@@ -220,10 +228,17 @@ export interface ToolCallBlock {
   details: string[];
 }
 
-export type LogEntry = FormattedLine | ToolCallBlock;
+export interface ReasoningBlock {
+  type: 'reasoning';
+  id: string;
+  text: string;
+}
+
+export type LogEntry = FormattedLine | ToolCallBlock | ReasoningBlock;
 
 export function parseToolMarkers(lines: string[]): LogEntry[];
 export function isToolCallBlock(entry: LogEntry): entry is ToolCallBlock;
+export function isReasoningBlock(entry: LogEntry): entry is ReasoningBlock;
 ```
 
 ```typescript
@@ -235,11 +250,12 @@ export interface FormattedLine {
   bold: boolean;
 }
 
-export type LogEntry = FormattedLine | ToolCallBlock;
+export type LogEntry = FormattedLine | ToolCallBlock | ReasoningBlock;
 
 export function formatLogs(rawLogs: string[], maxLines: number): LogEntry[];
 export function classifyLine(line: string): FormattedLine;
 export function isToolCallBlock(entry: LogEntry): entry is ToolCallBlock;
+export function isReasoningBlock(entry: LogEntry): entry is ReasoningBlock;
 ```
 
 ### Log Spacing
@@ -343,7 +359,8 @@ State buckets:
 - `skills`: loaded skill metadata.
 - `gitBranch`, `cwd`, `memUsage`: ambient metadata.
 - `expandedBlocks`: IDs of expanded tool-call blocks.
-- `focusedBlockId`: currently keyboard-focused tool-call block ID.
+- `expandedReasonings`: IDs of expanded reasoning blocks.
+- `focusedBlockId`: currently keyboard-focused collapsible block ID (tool or reasoning).
 
 Slash commands (`/provider`, `/model`, `/session`, `/skill`, `/help`, `/tools`, `/new`, `/clear`, `/exit`) drive overlay navigation and session actions. Function-key shortcuts are not used.
 

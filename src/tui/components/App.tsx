@@ -9,7 +9,7 @@ import { loadSkills, readSkillContent, SkillMeta } from '../../common/skills.js'
 import { useKeyboard } from '../hooks/useKeyboard.js';
 import { Header } from './Header.js';
 import { LogViewer, MAX_LINES as LOG_MAX_LINES } from './LogViewer.js';
-import { formatLogs, isToolCallBlock } from '../utils/logFormatter.js';
+import { formatLogs, isToolCallBlock, isReasoningBlock } from '../utils/logFormatter.js';
 import { InputLine } from './InputLine.js';
 import { StatusBar } from './StatusBar.js';
 import { SlashSuggestions } from './SlashSuggestions.js';
@@ -90,6 +90,7 @@ export const App: React.FC<Props> = ({ runner, dbStore }) => {
   } | null>(null);
 
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set());
+  const [expandedReasonings, setExpandedReasonings] = useState<Set<string>>(new Set());
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
 
   const [gitBranch, setGitBranch] = useState<string>('none');
@@ -518,7 +519,7 @@ export const App: React.FC<Props> = ({ runner, dbStore }) => {
 
     if (canNavigateLogs) {
       const entries = formatLogs(focusedAgent?.logs || [], LOG_MAX_LINES);
-      const blocks = entries.filter(isToolCallBlock);
+      const blocks = entries.filter((e) => isToolCallBlock(e) || isReasoningBlock(e));
       const focusedBlockIndex = blocks.findIndex((b) => b.id === focusedBlockId);
 
       if (key.upArrow) {
@@ -533,15 +534,30 @@ export const App: React.FC<Props> = ({ runner, dbStore }) => {
       }
       if (key.return || input === ' ') {
         if (focusedBlockId) {
-          setExpandedBlocks((prev) => {
-            const next = new Set(prev);
-            if (next.has(focusedBlockId)) {
-              next.delete(focusedBlockId);
-            } else {
-              next.add(focusedBlockId);
-            }
-            return next;
-          });
+          const focusedEntry = entries.find(
+            (e) => (isToolCallBlock(e) || isReasoningBlock(e)) && e.id === focusedBlockId
+          );
+          if (focusedEntry && isReasoningBlock(focusedEntry)) {
+            setExpandedReasonings((prev) => {
+              const next = new Set(prev);
+              if (next.has(focusedBlockId)) {
+                next.delete(focusedBlockId);
+              } else {
+                next.add(focusedBlockId);
+              }
+              return next;
+            });
+          } else {
+            setExpandedBlocks((prev) => {
+              const next = new Set(prev);
+              if (next.has(focusedBlockId)) {
+                next.delete(focusedBlockId);
+              } else {
+                next.add(focusedBlockId);
+              }
+              return next;
+            });
+          }
         }
         return;
       }
@@ -648,7 +664,7 @@ export const App: React.FC<Props> = ({ runner, dbStore }) => {
 
   useEffect(() => {
     const entries = formatLogs(focusedAgent?.logs || [], LOG_MAX_LINES);
-    const blocks = entries.filter(isToolCallBlock);
+    const blocks = entries.filter((e) => isToolCallBlock(e) || isReasoningBlock(e));
     if (blocks.length > 0) {
       const lastBlock = blocks[blocks.length - 1];
       setFocusedBlockId((prev) => prev ?? lastBlock.id);
@@ -728,6 +744,7 @@ export const App: React.FC<Props> = ({ runner, dbStore }) => {
         <LogViewer
           logs={focusedAgent?.logs || []}
           expandedBlocks={expandedBlocks}
+          expandedReasonings={expandedReasonings}
           focusedBlockId={focusedBlockId}
         />
 

@@ -10,12 +10,18 @@ export interface ToolCallBlock {
   details: string[];
 }
 
+export interface ReasoningBlock {
+  type: 'reasoning';
+  id: string;
+  text: string;
+}
+
 export interface PlainLine {
   type: 'line';
   text: string;
 }
 
-export type LogEntry = PlainLine | ToolCallBlock;
+export type LogEntry = PlainLine | ToolCallBlock | ReasoningBlock;
 
 export function isToolCallBlock(entry: LogEntry): entry is ToolCallBlock {
   return entry.type === 'tool-call';

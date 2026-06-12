@@ -1,0 +1,26 @@
+id: "008"
+name: ai-reasoning-error
+status: completed
+priority: P1
+author: architect
+created_at: 2026-06-12
+subagents:
+  approved: false
+summary: >
+  Capture and display the AI model's native reasoning as a collapsible block in
+  the TUI, and add visible feedback when the model returns empty or errors.
+affected_files:
+  new:
+    - src/tui/utils/reasoningParser.ts
+    - src/tui/components/ReasoningRow.tsx
+    - src/tests/tui/reasoningParser.test.ts
+    - src/tests/worker/AgentHarness.test.ts
+  modified:
+    - src/worker/harness/AgentHarness.ts
+    - src/tui/utils/logFormatter.ts
+    - src/tui/components/LogViewer.tsx
+    - src/tui/components/App.tsx
+    - specs/living/tui/design.md
+    - specs/archive/2026-06-12-008-ai-reasoning-error/tasks.md
+    - specs/archive/2026-06-12-008-ai-reasoning-error/.spec.yaml
+  removed: []

@@ -1,21 +1,24 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { useTheme } from '../theme/useTheme.js';
-import { formatLogs, LogVariant, isToolCallBlock, LogEntry } from '../utils/logFormatter.js';
+import { formatLogs, LogVariant, isToolCallBlock, isReasoningBlock, LogEntry } from '../utils/logFormatter.js';
 import { ToolCallRow } from './ToolCallRow.js';
+import { ReasoningRow } from './ReasoningRow.js';
 
 export interface LogViewerProps {
   logs: string[];
   expandedBlocks: Set<string>;
+  expandedReasonings: Set<string>;
   focusedBlockId: string | null;
   maxLines?: number;
 }
 
 export const MAX_LINES = 25;
 
-type Actor = 'assistant' | 'user' | 'system' | 'tool';
+type Actor = 'assistant' | 'user' | 'system' | 'tool' | 'reasoning';
 
 function actorForEntry(entry: LogEntry): Actor {
+  if (isReasoningBlock(entry)) return 'reasoning';
   if (isToolCallBlock(entry)) return 'tool';
   if (entry.variant === 'user') return 'user';
   if (entry.variant === 'system' || entry.variant === 'info' || entry.variant === 'error') {
@@ -27,6 +30,7 @@ function actorForEntry(entry: LogEntry): Actor {
 export const LogViewer: React.FC<LogViewerProps> = ({
   logs,
   expandedBlocks,
+  expandedReasonings,
   focusedBlockId,
   maxLines = MAX_LINES,
 }) => {
@@ -66,6 +70,18 @@ export const LogViewer: React.FC<LogViewerProps> = ({
                 <ToolCallRow
                   block={entry}
                   expanded={expandedBlocks.has(entry.id)}
+                  focused={focusedBlockId === entry.id}
+                />
+              </Box>
+            );
+          }
+
+          if (isReasoningBlock(entry)) {
+            return (
+              <Box key={entry.id} marginTop={actorChanged ? 1 : 0}>
+                <ReasoningRow
+                  block={entry}
+                  expanded={expandedReasonings.has(entry.id)}
                   focused={focusedBlockId === entry.id}
                 />
               </Box>
