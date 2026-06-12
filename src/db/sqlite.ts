@@ -179,6 +179,15 @@ export class DatabaseStore implements IDatabaseStore {
     });
   }
 
+  public deleteSession(agentId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run('DELETE FROM sessions WHERE id = ?', [agentId], (err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  }
+
   public close(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.close((err) => {

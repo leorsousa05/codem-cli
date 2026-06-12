@@ -15,16 +15,7 @@ async function main() {
   // Renderiza a aplicação React Ink
   const app = render(React.createElement(TelemetryHUD, { runner, dbStore }));
 
-  // Spawna o agente inicial padrão
-  const rootSession: AgentSession = {
-    id: '1',
-    name: 'Root Agent',
-    status: 'IDLE',
-    logs: ['Starting root agent worker thread...\n'],
-    isSubtask: false
-  };
 
-  runner.spawn(rootSession);
 
   // Garante fechamento correto em SIGINT
   process.on('SIGINT', async () => {

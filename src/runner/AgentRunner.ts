@@ -123,6 +123,17 @@ export class AgentRunner implements IAgentRunner {
     }
   }
 
+  public sendSkill(agentId: string, skillName: string, content: string): void {
+    const worker = this.activeWorkers.get(agentId);
+    if (worker) {
+      worker.postMessage({
+        type: 'AGENT_SKILL_INJECT',
+        agentId,
+        payload: { skillName, content }
+      } as IPCMessage);
+    }
+  }
+
   public onMessage(callback: (message: IPCMessage) => void): void {
     this.messageListeners.add(callback);
   }

@@ -1,0 +1,21 @@
+id: "004"
+name: skills-integration
+status: completed
+created_at: 2026-06-12
+completed_at: 2026-06-12
+author: architect
+priority: P1
+
+summary: >
+  Load agent skills from ~/.agents/skills/*/SKILL.md, expose them in the TUI
+  slash-command autocomplete with virtual scroll, and inject selected skill
+  content into the active agent session via IPC.
+
+affected_files:
+  new:
+    - src/common/skills.ts
+  modified:
+    - src/common/types.ts
+    - src/tui/index.tsx
+    - src/worker/agent.worker.ts
+    - src/worker/harness/AgentHarness.ts

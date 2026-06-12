@@ -7,7 +7,8 @@ export type MessageType =
   | 'AGENT_TOOL_REQUEST'
   | 'AGENT_TOOL_RESPONSE'
   | 'AGENT_STOP'
-  | 'AGENT_DESTROY_SUBTASK';
+  | 'AGENT_DESTROY_SUBTASK'
+  | 'AGENT_SKILL_INJECT';
 
 export type AgentStatus =
   | 'IDLE'
@@ -53,6 +54,8 @@ export interface KimiMessage {
   name?: string;
 }
 
+export type TUIOverlayMode = 'NONE' | 'HELP' | 'MODELS_SELECT' | 'SESSIONS_SELECT' | 'MCP_STATUS';
+
 export interface IDatabaseStore {
   initialize(): Promise<void>;
   createSession(session: Omit<AgentSession, 'logs'>): Promise<void>;
@@ -60,6 +63,7 @@ export interface IDatabaseStore {
   appendLog(agentId: string, text: string): Promise<void>;
   getSessionLogs(agentId: string): Promise<string[]>;
   getAllSessions(): Promise<AgentSession[]>;
+  deleteSession(agentId: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -68,6 +72,7 @@ export interface IAgentRunner {
   stop(agentId: string): Promise<void>;
   sendCommand(agentId: string, command: string): void;
   sendApproval(agentId: string, payload: ToolResponsePayload): void;
+  sendSkill(agentId: string, skillName: string, content: string): void;
   onMessage(callback: (message: IPCMessage) => void): void;
 }
 
