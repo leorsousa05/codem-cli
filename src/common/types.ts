@@ -54,7 +54,13 @@ export interface KimiMessage {
   name?: string;
 }
 
-export type TUIOverlayMode = 'NONE' | 'HELP' | 'MODELS_SELECT' | 'SESSIONS_SELECT' | 'MCP_STATUS';
+export type TUIOverlayMode =
+  | 'NONE'
+  | 'HELP'
+  | 'MODELS_SELECT'
+  | 'SESSIONS_SELECT'
+  | 'MCP_STATUS'
+  | 'PROVIDER_MODAL';
 
 export interface IDatabaseStore {
   initialize(): Promise<void>;

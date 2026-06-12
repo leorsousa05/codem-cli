@@ -93,12 +93,17 @@ export class AgentHarness {
           tools: formattedTools,
         });
 
+        let assistantText = '';
         for await (const textPart of response.textStream) {
-          this.sendOutput(textPart);
+          assistantText += textPart;
         }
 
         const resolvedText = await response.text;
         const resolvedToolCalls = await response.toolCalls;
+
+        if (assistantText.trim()) {
+          this.sendOutput(assistantText);
+        }
 
         // Monta a resposta da assistant contendo texto e tool calls se houverem
         const assistantContent: any[] = [];
@@ -130,13 +135,13 @@ export class AgentHarness {
           const toolMeta = toolsRegistry.find(t => t.name === tName);
           const serverName = toolMeta ? toolMeta.serverName : 'unknown';
 
-          this.sendOutput(`\n⚙️ Requesting execution: ${tName} from ${serverName}...\n`);
+          this.sendOutput(`[TOOL_START] ${tName} ${serverName}`);
 
           const approval = await this.requestApprovalFn(tName, tArgs, serverName);
 
           if (approval.approved) {
             this.sendStatus('EXECUTING_TOOL');
-            this.sendOutput(`\n⚙️ Running ${tName}...\n`);
+            this.sendOutput(`[TOOL_RUN] ${tName}`);
             try {
               let toolResult;
               if (serverName === 'native') {
@@ -147,7 +152,8 @@ export class AgentHarness {
                 toolResult = await this.mcp.callTool(serverName, tName, tArgs);
               }
 
-              this.sendOutput(`\n✅ Tool executed successfully.\n`);
+              this.sendOutput(`[TOOL_RESULT] ${tName} ${JSON.stringify(toolResult)}`);
+              this.sendOutput(`[TOOL_SUCCESS] ${tName}`);
 
               this.messages.push({
                 role: 'tool',
@@ -167,7 +173,7 @@ export class AgentHarness {
               this.sendStatus('THINKING');
             } catch (toolError: any) {
               const errMsg = toolError.message || String(toolError);
-              this.sendOutput(`\n❌ Tool error: ${errMsg}\n`);
+              this.sendOutput(`[TOOL_ERROR] ${tName} ${errMsg}`);
 
               this.messages.push({
                 role: 'tool',
@@ -187,7 +193,7 @@ export class AgentHarness {
               this.sendStatus('THINKING');
             }
           } else {
-            this.sendOutput(`\n⚠️ Tool execution rejected by user.\n`);
+            this.sendOutput(`[TOOL_REJECTED] ${tName}`);
 
             this.messages.push({
               role: 'tool',
@@ -213,7 +219,7 @@ export class AgentHarness {
 
       this.sendStatus('FINISHED');
     } catch (error: any) {
-      this.sendOutput(`\n🚨 Critical error: ${error.message || String(error)}\n`);
+      this.sendOutput(`[CRITICAL ERROR]: ${error.message || String(error)}`);
       this.sendStatus('ERROR');
     }
   }

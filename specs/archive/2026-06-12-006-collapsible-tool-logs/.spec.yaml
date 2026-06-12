@@ -1,0 +1,25 @@
+id: "006"
+name: collapsible-tool-logs
+title: "Collapsible Tool Call Logs with Final Result Display"
+status: completed
+priority: P1
+author: architect
+created_at: 2026-06-12
+subagents:
+  approved: false
+summary: >
+  Redesign how tool calls are rendered in the TUI chat log. Group tool lifecycle
+  messages into collapsible blocks, hide intermediate steps by default, show only
+  the final result/status, and remove emoji characters from tool output.
+affected_files:
+  new:
+    - src/tui/utils/toolLogParser.ts
+    - src/tui/components/ToolCallRow.tsx
+    - src/tests/tui/toolLogParser.test.ts
+  modified:
+    - src/worker/harness/AgentHarness.ts
+    - src/tui/utils/logFormatter.ts
+    - src/tui/components/LogViewer.tsx
+    - src/tui/components/App.tsx
+    - src/tests/tui/logFormatter.test.ts
+  removed: []

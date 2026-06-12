@@ -170,7 +170,7 @@ parentPort.on('message', async (message: IPCMessage) => {
     }
     const { skillName, content } = message.payload;
     harness.injectSkill(skillName, content);
-    sendOutput(`\n⚡ Skill '${skillName}' injected. Ready.\n`);
+    sendOutput(`\n[SKILL ACTIVE] ${skillName}\n`);
     sendStatus('IDLE');
   } else if (message.type === 'AGENT_STOP') {
     await mcp.close();

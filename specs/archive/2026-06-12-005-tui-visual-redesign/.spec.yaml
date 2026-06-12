@@ -1,0 +1,42 @@
+id: "005"
+name: tui-visual-redesign
+title: "Minimal Clean TUI Visual Redesign with Theme Support"
+status: completed
+completed_at: 2026-06-12
+priority: P1
+author: architect
+created_at: 2026-06-12
+subagents:
+  approved: false
+summary: >
+  Redesign the entire terminal UI of codem-cli with a minimal, clean aesthetic.
+  Decompose the monolithic src/tui/index.tsx into focused components, introduce a
+  theme provider with light/dark system-preference support, and establish a custom
+  color palette inspired by modern agent CLIs.
+affected_files:
+  new:
+    - src/tui/components/App.tsx
+    - src/tui/components/Header.tsx
+    - src/tui/components/LogViewer.tsx
+    - src/tui/components/InputLine.tsx
+    - src/tui/components/StatusBar.tsx
+    - src/tui/components/SlashSuggestions.tsx
+    - src/tui/components/SandboxModal.tsx
+    - src/tui/components/modals/HelpModal.tsx
+    - src/tui/components/modals/ProviderModal.tsx
+    - src/tui/components/modals/SessionModal.tsx
+    - src/tui/components/modals/ModelModal.tsx
+    - src/tui/components/modals/MCPStatusModal.tsx
+    - src/tui/theme/types.ts
+    - src/tui/theme/themes.ts
+    - src/tui/theme/ThemeProvider.tsx
+    - src/tui/theme/useTheme.ts
+    - src/tui/hooks/useKeyboard.ts
+    - src/tui/utils/logFormatter.ts
+    - src/tests/tui/theme.test.ts
+    - src/tests/tui/logFormatter.test.ts
+  modified:
+    - src/tui/index.tsx
+    - src/common/types.ts
+  removed:
+    - src/tui/index.tsx (monolithic content replaced by re-export)
