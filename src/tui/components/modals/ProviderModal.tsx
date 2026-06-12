@@ -89,9 +89,6 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
         </Box>
       )}
 
-      <Box marginTop={1}>
-        <Text color={theme.textMuted}>ESC to close</Text>
-      </Box>
     </Box>
   );
 };

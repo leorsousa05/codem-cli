@@ -1,21 +1,24 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { useTheme } from '../theme/useTheme.js';
+import { TUIOverlayMode } from '../../common/types.js';
+import { getStatusHint } from '../utils/statusHints.js';
 
 export interface StatusBarProps {
   memoryUsage: string;
+  overlayMode: TUIOverlayMode;
+  suggestions: Array<{ cmd: string; desc: string }>;
+  pendingApproval: boolean;
 }
 
-export const StatusBar: React.FC<StatusBarProps> = ({ memoryUsage }) => {
+export const StatusBar: React.FC<StatusBarProps> = ({
+  memoryUsage,
+  overlayMode,
+  suggestions,
+  pendingApproval,
+}) => {
   const { theme } = useTheme();
-
-  const shortcuts = [
-    { key: 'F1', label: 'help' },
-    { key: 'F2', label: 'provider' },
-    { key: 'F3', label: 'sessions' },
-    { key: 'F4', label: 'tools' },
-    { key: 'F5', label: 'exit' },
-  ];
+  const hint = getStatusHint(overlayMode, suggestions, pendingApproval);
 
   return (
     <Box
@@ -26,13 +29,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ memoryUsage }) => {
       paddingX={2}
     >
       <Box>
-        {shortcuts.map(({ key, label }, index) => (
-          <Text key={key}>
-            {index > 0 && <Text color={theme.textMuted}>  </Text>}
-            <Text bold color={theme.accent}>{key}</Text>
-            <Text color={theme.textMuted}> {label}</Text>
-          </Text>
-        ))}
+        <Text color={theme.textMuted}>{hint}</Text>
       </Box>
       <Box flexGrow={1} />
       <Box>

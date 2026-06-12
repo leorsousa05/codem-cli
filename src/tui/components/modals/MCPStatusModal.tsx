@@ -18,9 +18,6 @@ export const MCPStatusModal: React.FC = () => {
       {tools.map((tool) => (
         <Text key={tool} color={theme.text}>• {tool}</Text>
       ))}
-      <Box marginTop={1}>
-        <Text color={theme.textMuted}>ESC to close</Text>
-      </Box>
     </Box>
   );
 };

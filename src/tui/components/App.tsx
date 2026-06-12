@@ -30,10 +30,12 @@ interface Props {
 
 const slashCommands = [
   { cmd: '/provider', desc: 'Configure LLM Providers, API keys and custom Base URL' },
-  { cmd: '/new', desc: 'Start a new clean chat session' },
   { cmd: '/model', desc: 'Change the default model for active provider' },
-  { cmd: '/skill', desc: 'Activate a skill from ~/.agents/skills' },
   { cmd: '/session', desc: 'Switch to a previous chat session' },
+  { cmd: '/skill', desc: 'Activate a skill from ~/.agents/skills' },
+  { cmd: '/help', desc: 'Show help and keyboard shortcuts' },
+  { cmd: '/tools', desc: 'List connected MCP and native tools' },
+  { cmd: '/new', desc: 'Start a new clean chat session' },
   { cmd: '/clear', desc: 'Clear history logs of the current session' },
   { cmd: '/exit', desc: 'Shut down and exit application' },
 ];
@@ -327,6 +329,10 @@ export const App: React.FC<Props> = ({ runner, dbStore }) => {
         }
         return next;
       });
+    } else if (action === '/help') {
+      setOverlayMode('HELP');
+    } else if (action === '/tools') {
+      setOverlayMode('MCP_STATUS');
     } else if (action === '/exit') {
       runner.shutdownAll().then(() => {
         exit();
@@ -340,37 +346,6 @@ export const App: React.FC<Props> = ({ runner, dbStore }) => {
       setOverlayMode('NONE');
       setProviderStep('SELECT_PROVIDER');
       setUserInput('');
-      return;
-    }
-
-    const isF1 = input === '\u001bOP' || input === '\u001b[11~' || input === '\u001b[[A';
-    const isF2 = input === '\u001bOQ' || input === '\u001b[12~' || input === '\u001b[[B';
-    const isF3 = input === '\u001bOR' || input === '\u001b[13~' || input === '\u001b[[C';
-    const isF4 = input === '\u001bOS' || input === '\u001b[14~' || input === '\u001b[[D';
-    const isF5 = input === '\u001b[15~' || input === '\u001b[[E';
-
-    if (isF1) {
-      setOverlayMode((prev) => (prev === 'HELP' ? 'NONE' : 'HELP'));
-      return;
-    }
-    if (isF2) {
-      setOverlayMode((prev) => (prev === 'PROVIDER_MODAL' ? 'NONE' : 'PROVIDER_MODAL'));
-      setProviderStep('SELECT_PROVIDER');
-      return;
-    }
-    if (isF3) {
-      setOverlayMode((prev) => (prev === 'SESSIONS_SELECT' ? 'NONE' : 'SESSIONS_SELECT'));
-      return;
-    }
-    if (isF4) {
-      setOverlayMode((prev) => (prev === 'MCP_STATUS' ? 'NONE' : 'MCP_STATUS'));
-      return;
-    }
-    if (isF5) {
-      runner.shutdownAll().then(() => {
-        exit();
-        process.exit(0);
-      });
       return;
     }
 
@@ -723,8 +698,14 @@ export const App: React.FC<Props> = ({ runner, dbStore }) => {
     if (!overlay) return null;
 
     return (
-      <Box position="absolute" padding={3} width="100%" height="100%">
-        <Box flexGrow={1} borderStyle="single" borderColor={theme.border}>
+      <Box
+        position="absolute"
+        width="100%"
+        height="100%"
+        alignItems="center"
+        justifyContent="center"
+      >
+        <Box borderStyle="single" borderColor={theme.border} paddingX={2} paddingY={1}>
           {overlay}
         </Box>
       </Box>
@@ -773,7 +754,12 @@ export const App: React.FC<Props> = ({ runner, dbStore }) => {
         />
       </Box>
 
-      <StatusBar memoryUsage={memUsage} />
+      <StatusBar
+        memoryUsage={memUsage}
+        overlayMode={overlayMode}
+        suggestions={suggestions}
+        pendingApproval={!!pendingApproval}
+      />
 
       {renderOverlay()}
     </Box>

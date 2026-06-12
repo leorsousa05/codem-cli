@@ -30,9 +30,6 @@ export const ModelModal: React.FC<ModelModalProps> = ({ models, selectedIndex, a
           );
         })}
       </Box>
-      <Box marginTop={1}>
-        <Text color={theme.textMuted}>↑↓ navigate  •  Enter to select  •  ESC to cancel</Text>
-      </Box>
     </Box>
   );
 };

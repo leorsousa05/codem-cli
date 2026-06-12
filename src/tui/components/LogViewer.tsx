@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { useTheme } from '../theme/useTheme.js';
-import { formatLogs, LogVariant, isToolCallBlock } from '../utils/logFormatter.js';
+import { formatLogs, LogVariant, isToolCallBlock, LogEntry } from '../utils/logFormatter.js';
 import { ToolCallRow } from './ToolCallRow.js';
 
 export interface LogViewerProps {
@@ -12,6 +12,17 @@ export interface LogViewerProps {
 }
 
 export const MAX_LINES = 25;
+
+type Actor = 'assistant' | 'user' | 'system' | 'tool';
+
+function actorForEntry(entry: LogEntry): Actor {
+  if (isToolCallBlock(entry)) return 'tool';
+  if (entry.variant === 'user') return 'user';
+  if (entry.variant === 'system' || entry.variant === 'info' || entry.variant === 'error') {
+    return 'system';
+  }
+  return 'assistant';
+}
 
 export const LogViewer: React.FC<LogViewerProps> = ({
   logs,
@@ -47,19 +58,22 @@ export const LogViewer: React.FC<LogViewerProps> = ({
         <Text color={theme.textMuted}>No active logs</Text>
       ) : (
         entries.map((entry, index) => {
+          const actorChanged = index > 0 && actorForEntry(entry) !== actorForEntry(entries[index - 1]);
+
           if (isToolCallBlock(entry)) {
             return (
-              <ToolCallRow
-                key={entry.id}
-                block={entry}
-                expanded={expandedBlocks.has(entry.id)}
-                focused={focusedBlockId === entry.id}
-              />
+              <Box key={entry.id} marginTop={actorChanged ? 1 : 0}>
+                <ToolCallRow
+                  block={entry}
+                  expanded={expandedBlocks.has(entry.id)}
+                  focused={focusedBlockId === entry.id}
+                />
+              </Box>
             );
           }
 
           return (
-            <Box key={index}>
+            <Box key={index} marginTop={actorChanged ? 1 : 0}>
               <Text color={colorForVariant(entry.variant)} bold={entry.bold}>
                 {entry.text}
               </Text>

@@ -26,9 +26,6 @@ export const SessionModal: React.FC<SessionModalProps> = ({ sessions, focusedInd
           </Text>
         );
       })}
-      <Box marginTop={1}>
-        <Text color={theme.textMuted}>ESC to cancel and return to chat</Text>
-      </Box>
     </Box>
   );
 };

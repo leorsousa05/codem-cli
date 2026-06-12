@@ -37,12 +37,14 @@ This redesign replaces the monolithic `TelemetryHUD` component with a modular Re
 │   │   │   └── useKeyboard.ts          # ADDED: reusable keyboard input subscription
 │   │   └── utils/
 │   │       ├── logFormatter.ts         # ADDED: log line parsing and color classification
-│   │       └── toolLogParser.ts        # ADDED: group tool lifecycle markers into blocks
+│   │       ├── toolLogParser.ts        # ADDED: group tool lifecycle markers into blocks
+│   │       └── statusHints.ts          # ADDED: contextual status-bar hint text
 │   └── tests/
 │       └── tui/
 │           ├── theme.test.ts           # ADDED: theme detection and palette tests
 │           ├── logFormatter.test.ts    # ADDED: log formatting tests
-│           └── toolLogParser.test.ts   # ADDED: tool marker parsing tests
+│           ├── toolLogParser.test.ts   # ADDED: tool marker parsing tests
+│           └── statusHints.test.ts     # ADDED: status bar hint logic tests
 └── specs/
     └── changes/
         └── 005-tui-visual-redesign/
@@ -156,9 +158,17 @@ export interface InputLineProps {
 // src/tui/components/StatusBar.tsx
 export interface StatusBarProps {
   memoryUsage: string;
-  activeModel: string;
-  shortcuts: string[];
+  overlayMode: TUIOverlayMode;
+  suggestions: Array<{ cmd: string; desc: string }>;
+  pendingApproval: boolean;
 }
+
+// src/tui/utils/statusHints.ts
+export function getStatusHint(
+  overlayMode: TUIOverlayMode,
+  suggestions: Array<{ cmd: string; desc: string }>,
+  pendingApproval: boolean
+): string;
 
 // src/tui/components/SlashSuggestions.tsx
 export interface SlashSuggestionsProps {
@@ -232,6 +242,10 @@ export function classifyLine(line: string): FormattedLine;
 export function isToolCallBlock(entry: LogEntry): entry is ToolCallBlock;
 ```
 
+### Log Spacing
+
+`LogViewer` groups consecutive entries from the same "actor" and inserts an extra blank line when the actor changes (assistant → user, assistant → tool, tool → assistant, system → other). This is implemented by comparing each `LogEntry`'s variant or `tool-call` type via `actorForEntry`.
+
 ### Keyboard Hook
 
 ```typescript
@@ -293,7 +307,6 @@ export function useKeyboard(handler: KeyboardHandler): void;
 [App.tsx dispatcher]
     │
     ├── ESC pressed ──► close overlay, reset provider step
-    ├── F1-F5 pressed ──► toggle corresponding overlay
     ├── Overlay active ──► route to overlay handler
     ├── Slash suggestions visible ──► route to suggestion handler
     ├── Pending approval ──► route to sandbox handler
@@ -304,12 +317,16 @@ export function useKeyboard(handler: KeyboardHandler): void;
 ```
 [App.tsx renders]
     │
-    ├── overlayMode === 'NONE'     ──► render Header + LogViewer + InputLine + StatusBar
-    ├── overlayMode === 'HELP'     ──► render HelpModal on top
-    ├── overlayMode === 'PROVIDER_MODAL' ──► render ProviderModal wizard
-    ├── overlayMode === 'SESSIONS_SELECT' ──► render SessionModal
-    ├── overlayMode === 'MODELS_SELECT'   ──► render ModelModal
-    └── overlayMode === 'MCP_STATUS'      ──► render MCPStatusModal
+    ├── overlayMode === 'NONE'
+    │   └── Header + LogViewer + InputLine + StatusBar
+    └── overlayMode !== 'NONE'
+        └── centered popup container
+                │
+                ▼
+            bordered inner box
+                │
+                ▼
+            HelpModal / ProviderModal / SessionModal / ModelModal / MCPStatusModal
 ```
 
 ## State Management
@@ -327,6 +344,8 @@ State buckets:
 - `gitBranch`, `cwd`, `memUsage`: ambient metadata.
 - `expandedBlocks`: IDs of expanded tool-call blocks.
 - `focusedBlockId`: currently keyboard-focused tool-call block ID.
+
+Slash commands (`/provider`, `/model`, `/session`, `/skill`, `/help`, `/tools`, `/new`, `/clear`, `/exit`) drive overlay navigation and session actions. Function-key shortcuts are not used.
 
 Theme state is managed by `ThemeProvider` and consumed via `useTheme`. It does not change at runtime unless the environment is re-detected on a future render cycle.
 
